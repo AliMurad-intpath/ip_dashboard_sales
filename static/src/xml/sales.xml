@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+ <t t-inherit="ip_dashboard.Workspace" t-inherit-mode="extension">
+  <xpath expr="//p[@t-if='metric &amp;&amp; metric.scope']" position="after">
+   <div t-if="block.source.startsWith('sales.') &amp;&amp; !state.editing" class="ip-actions">
+    <button type="button" class="ip-btn" t-att-disabled="state.salesOpening" t-on-click="() =&gt; this.salesOpenOrders(block)">
+     <t t-esc="state.lang === 'ar' ? 'عرض أوامر هذا التقرير' : 'Open matching orders'"/>
+    </button>
+   </div>
+  </xpath>
+  <xpath expr="//div[@t-if=&quot;block.kind === 'kpi'&quot;]/t[@t-call='ip_dashboard.Amount']" position="replace">
+   <span t-if="metric.not_applicable" t-esc="state.lang === 'ar' ? 'غير متاح' : 'N/A'"/>
+   <t t-else="" t-call="ip_dashboard.Amount"/>
+  </xpath>
+ </t>
+</templates>
