@@ -33,7 +33,16 @@ METRICS = {
  'quote_followup': ('Quotation follow-up list', 'قائمة متابعة عروض الأسعار', 'Oldest open quotations first; up to 100 rows. Values before tax, in company currency.', 'أقدم العروض المفتوحة أولاً، حتى 100 عرض، مع قيمتها قبل الضريبة بعملة الشركة لتسهيل المتابعة.'),
  'invoice_followup': ('Orders to invoice', 'قائمة الأوامر المطلوب فوترتها', 'Oldest confirmed orders currently ready to invoice; displayed value is the full untaxed order value.', 'أقدم الأوامر الجاهزة للفوترة. القيمة المعروضة هي كامل قيمة أمر البيع قبل الضريبة وليست المبلغ المتبقي للفوترة.'),
 }
-CURRENT = {'quotes_value','quotes_count','expired_quotes','quote_age','to_invoice_orders','quote_followup','invoice_followup'}
+METRICS.update({
+ 'no_delivery': ('Confirmed orders without delivery orders', 'أوامر مؤكدة بلا أوامر تسليم', 'Confirmed orders with positive goods lines and no non-cancelled customer delivery. Service-only orders are excluded. Includes orders missing both documents.', 'أوامر مؤكدة تحتوي بضائع بكميات موجبة ولا يرتبط بها تسليم للعميل غير ملغى. تُستبعد الخدمات فقط، وتشمل الحالات التي تفتقد الفاتورة أيضاً.'),
+ 'no_invoice': ('Confirmed orders without invoices', 'أوامر مؤكدة بلا فواتير', 'Confirmed orders with no non-cancelled customer invoice. A draft invoice counts as existing; a credit note does not. Not all these orders are invoiceable yet.', 'أوامر مؤكدة بلا فاتورة عميل غير ملغاة. الفاتورة المسودة تُعد موجودة، والإشعار الدائن لا يُعد فاتورة. قد تتطلب بعض الأوامر التسليم أولاً.'),
+ 'no_both': ('Confirmed orders without delivery or invoice', 'أوامر مؤكدة بلا تسليم ولا فاتورة', 'Goods orders missing both a customer delivery and a customer invoice. This is the intersection of the two preceding counts, not an additional category.', 'أوامر بضائع مؤكدة تفتقد أمر التسليم والفاتورة معاً. هي جزء مشترك من المؤشرين السابقين؛ لا تجمع الأعداد الثلاثة.'),
+ 'draft_quotes': ('Draft quotations', 'عروض الأسعار المسودة', 'Only quotations in Draft; sent quotations are excluded. Current workload, independent of the selected period.', 'عروض الأسعار في حالة مسودة فقط، دون العروض المرسلة. تعرض الحالة الحالية ولا تتبع الفترة المختارة.'),
+ 'suggested_actions': ('Sales exceptions and suggested actions', 'حالات المبيعات والإجراءات المقترحة', 'One row per affected order or draft quotation, oldest first, up to 100. Suggestions only: no delivery, invoice or message is created automatically.', 'سطر واحد لكل أمر يحتاج معالجة أو عرض مسودة، الأقدم أولاً وحتى 100 سجل. إجراءات مقترحة فقط؛ لا يُنشأ تسليم أو فاتورة ولا تُرسل رسالة تلقائياً.'),
+})
+EXCEPTIONS = {'no_delivery','no_invoice','no_both','suggested_actions'}
+
+CURRENT = EXCEPTIONS | {'draft_quotes','quotes_value','quotes_count','expired_quotes','quote_age','to_invoice_orders','quote_followup','invoice_followup'}
 COHORT = {'confirmation_rate', 'cancel_rate'}
 MONEY = {'bookings','aov','margin','product_sales','category_sales','quotes_value','quote_age'}
 PERCENT = {'repeat_share','top5_share','growth','margin_pct','confirmation_rate','cancel_rate'}
@@ -65,7 +74,7 @@ class SalesProvider(models.AbstractModel):
         for key, (en, ar, desc, desc_ar) in METRICS.items():
             if key in ('margin','margin_pct') and not margin_available:
                 continue
-            kinds = KINDS if key in GROUPABLE or key in ('product_sales','category_sales') else ['table','bar','column','pie','doughnut'] if key == 'quote_age' else ['table'] if key.endswith('followup') else ['kpi']
+            kinds = KINDS if key in GROUPABLE or key in ('product_sales','category_sales') else ['table','bar','column','pie','doughnut'] if key == 'quote_age' else ['table'] if key.endswith('followup') or key=='suggested_actions' else ['kpi']
             sources['sales.'+key] = dict(label=en,label_ar=ar,description=desc,description_ar=desc_ar,
                 module='Sales',groups=GROUPS,model='sale.order',company_field='company_id',kinds=kinds,
                 filters=[OWNER]+([BREAKDOWN] if key in GROUPABLE else []))
@@ -122,6 +131,46 @@ class SalesProvider(models.AbstractModel):
             rows.append(row)
         return rows
 
+    def _sales_case(self, order, key):
+        if order.state == 'draft':
+            return 'draft'
+        missing_delivery = False
+        missing_invoice = False
+        if key in ('no_delivery','no_both','suggested_actions'):
+            check_read(order.order_line)
+            goods = False
+            for line in order.order_line:
+                check_read(line.product_id)
+                if not line.display_type and not line.is_downpayment and line.product_uom_qty > 0 and line.product_id.type != 'service':
+                    goods = True
+            if goods:
+                check_read(order.picking_ids)
+                has_delivery = False
+                for picking in order.picking_ids:
+                    check_read(picking.location_dest_id)
+                    if picking.state != 'cancel' and picking.location_dest_id.usage == 'customer':
+                        has_delivery = True
+                missing_delivery = not has_delivery
+        if key in ('no_invoice','no_both','suggested_actions'):
+            # Check the whole linked recordset: hidden invoices must not become false "missing" cases.
+            check_read(order.invoice_ids)
+            missing_invoice = not any(inv.move_type == 'out_invoice' and inv.state != 'cancel' for inv in order.invoice_ids)
+        if key=='no_both':
+            return 'both' if missing_delivery and missing_invoice else None
+        return 'both' if missing_delivery and missing_invoice else 'delivery' if missing_delivery else 'invoice' if missing_invoice else None
+
+    def _sales_exception_rows(self, orders, key):
+        return [(order,case) for order in orders if (case := self._sales_case(order,key))]
+
+    def _sales_actions(self, order, case, arabic):
+        labels={'draft':('Draft quotation','عرض مسودة'),'delivery':('No delivery order','لا يوجد أمر تسليم'),'invoice':('No customer invoice','لا توجد فاتورة عميل'),'both':('No delivery order or invoice','لا يوجد تسليم ولا فاتورة')}
+        delivery=('Check goods routes, warehouse and procurement errors; generate the required transfer through the normal fulfilment flow. Do not mark goods delivered without shipment.', 'راجع مسارات المنتجات والمستودع وأخطاء التوريد، ثم أنشئ التحويل المطلوب من دورة التنفيذ المعتادة. لا تسجل التسليم قبل الشحن الفعلي.')
+        invoice=(('Review invoiceable quantities and down payments, then create the customer invoice. Check existing links to avoid duplicates.', 'راجع الكميات القابلة للفوترة والدفعات المقدمة، ثم أنشئ فاتورة العميل بعد التحقق من الروابط لتجنب التكرار.') if order.invoice_status=='to invoice' else ('Check the invoicing policy and delivery/service milestones. Complete the required milestone before invoicing; do not force an invoice.', 'راجع سياسة الفوترة والتسليم أو مراحل إنجاز الخدمة. أكمل الشرط المطلوب قبل الفوترة ولا تنشئ فاتورة دون استحقاق.'))
+        draft=('Review customer details, prices, validity and availability; obtain internal approval if required, then send the quotation and agree a follow-up date.', 'راجع بيانات العميل والأسعار والصلاحية والتوفر، واحصل على الموافقة الداخلية عند الحاجة، ثم أرسل العرض وحدد موعد المتابعة.')
+        index=1 if arabic else 0
+        action=draft[index] if case=='draft' else delivery[index] if case=='delivery' else invoice[index] if case=='invoice' else delivery[index]+' '+invoice[index]
+        return labels[case][index],action
+
     def _sales_selection(self, source_key, block, filters, company):
         spec = self._get_sources().get(source_key)
         if not spec or not self._source_allowed(spec):
@@ -137,7 +186,11 @@ class SalesProvider(models.AbstractModel):
         end = end or today
         base = list(domain)
         if key in CURRENT:
-            if key in ('to_invoice_orders','invoice_followup'):
+            if key in EXCEPTIONS:
+                domain += [('state','in',['sale','done','draft'] if key=='suggested_actions' else ['sale','done'])]
+            elif key=='draft_quotes':
+                domain += [('state','=','draft')]
+            elif key in ('to_invoice_orders','invoice_followup'):
                 domain += [('state','in',['sale','done']),('invoice_status','=','to invoice')]
             else:
                 domain += [('state','in',['draft','sent'])]
@@ -182,6 +235,21 @@ class SalesProvider(models.AbstractModel):
             en += ' Amounts in ' + company.currency_id.name + '.'
             ar += ' المبالغ بعملة ' + company.currency_id.name + '.'
         result.update(scope=en,scope_ar=ar)
+        if key=='draft_quotes':
+            result['value']=len(orders)
+            return result
+        if key in EXCEPTIONS:
+            cases=self._sales_exception_rows(orders,key)
+            result['value']=len(cases)
+            if key=='suggested_actions':
+                result['columns']=['الطلب','العميل','المسؤول','الحالة','الإجراء المقترح'] if arabic else ['Order','Customer','Owner','Case','Suggested action']
+                result['records']=[]
+                for order,case in cases[:100]:
+                    check_read(order.partner_id);check_read(order.user_id)
+                    label,action=self._sales_actions(order,case,arabic)
+                    result['records'].append([order.name,order.partner_id.display_name,order.user_id.display_name or ('غير معيّن' if arabic else 'Unassigned'),label,action])
+                result['truncated']=len(cases)>100
+            return result
         if key in COHORT:
             target = ('sale','done') if key=='confirmation_rate' else ('cancel',)
             result['value']=percentage(sum(o.state in target for o in orders),len(orders))
@@ -261,12 +329,12 @@ class SalesProvider(models.AbstractModel):
             return dict(id=key+'_'+kind+'_'+(group or 'total'),source='sales.'+key,kind=kind,width=width,title=en,title_ar=ar,
                 filters={'group_by':group} if group else {})
         templates=[
-            ('executive','Sales — CEO overview','المبيعات — نظرة تنفيذية','Sales momentum, customer dependence and work requiring attention.','تابع نمو المبيعات والعملاء الأهم وما يحتاج متابعة.',[
-                b('bookings'),b('orders'),b('aov'),b('growth'),b('customers'),b('repeat_share'),b('top5_share'),b('confirmation_days'),
-                b('bookings','line',2,'month'),b('bookings','bar',2,'salesperson'),b('bookings','bar',2,'customer'),b('category_sales','doughnut',2),b('margin'),b('margin_pct'),b('quotes_value'),b('to_invoice_orders')]),
-            ('performance','Sales — Customers and products','المبيعات — العملاء والمنتجات','Understand who buys, what sells and which teams drive sales.','اعرف من يشتري، وما المنتجات الأكثر مبيعاً، وأداء فرق البيع.',[
-                b('bookings'),b('customers'),b('aov'),b('top5_share'),b('bookings','table',2,'customer'),b('product_sales','bar',2),b('category_sales','column',2),b('bookings','bar',2,'team'),b('margin','bar',2,'salesperson'),b('orders','column',2,'month')]),
-            ('followup','Sales — Quotations and follow-up','المبيعات — العروض والمتابعة','Current quotations and invoicing workload, with created-order conversion.','العروض التي تحتاج متابعة والأوامر الجاهزة للفوترة، مع نسبة تأكيد الطلبات المنشأة.',[
-                b('quotes_value'),b('quotes_count'),b('expired_quotes'),b('to_invoice_orders'),b('confirmation_rate'),b('cancel_rate'),b('confirmation_days',width=2),b('quote_age','column',2),b('quotes_value','bar',2,'salesperson'),b('quote_followup','table',4),b('invoice_followup','table',4)])]
+            ('executive','Sales — CEO overview','المبيعات — نظرة تنفيذية','Sales totals, growth and profitability.','المبيعات الإجمالية والنمو والربحية.',[
+                b('bookings'),b('orders'),b('aov'),b('growth'),b('margin'),b('margin_pct'),b('confirmation_rate'),b('cancel_rate'),b('bookings','line',4,'month')]),
+            ('performance','Sales — Customers and products','المبيعات — العملاء والمنتجات','Customer dependence, products and team performance.','تركيز العملاء وأداء المنتجات وفرق المبيعات.',[
+                b('customers'),b('repeat_share'),b('top5_share'),b('confirmation_days'),b('bookings','table',2,'customer'),b('product_sales','bar',2),b('category_sales','column',2),b('bookings','bar',2,'team'),b('margin','bar',4,'salesperson')]),
+            ('followup','Sales — Exceptions and actions','المبيعات — الحالات والإجراءات','Missing deliveries and invoices, draft quotations and practical next steps.','أوامر تفتقد التسليم أو الفاتورة، وعروض مسودة، وخطوات واضحة للمتابعة.',[
+                b('no_delivery'),b('no_invoice'),b('no_both'),b('draft_quotes'),b('suggested_actions','table',4),
+                b('quotes_value'),b('quotes_count'),b('expired_quotes'),b('to_invoice_orders'),b('quote_age','column',4)])]
         return super()._get_templates()+[dict(key='sales.'+key,name=en,name_ar=ar,description=desc,description_ar=desc_ar,
             blocks=[block for block in blocks if block['source'] in sources]) for key,en,ar,desc,desc_ar,blocks in templates]

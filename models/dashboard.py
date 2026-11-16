@@ -1,6 +1,6 @@
 from odoo import models, _
 from odoo.exceptions import AccessError, ValidationError
-from .provider import check_read
+from .provider import check_read, EXCEPTIONS, LIMIT
 
 
 class SalesDashboard(models.Model):
@@ -25,6 +25,11 @@ class SalesDashboard(models.Model):
         company = self.env['res.company'].browse(company_id)
         provider = self.env['ip.dashboard.provider'].with_company(company).with_context(allowed_company_ids=[company.id])
         spec,key,domain,start,end,today,base = provider._sales_selection(block['source'],block,filters,company)
+        if key in EXCEPTIONS:
+            orders=provider._sales_records(domain)
+            if len(orders)>LIMIT:
+                raise ValidationError(_('More than 5,000 orders. Use My sales to narrow the workload.'))
+            domain += [('id','in',[o.id for o,case in provider._sales_exception_rows(orders,key)])]
         check_read(provider.env['sale.order'])
         return {'type':'ir.actions.act_window','name':_('Sales report — matching orders'),
                 'res_model':'sale.order','view_mode':'list,form','domain':domain,'target':'current',
