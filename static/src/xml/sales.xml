@@ -21,5 +21,9 @@
    <span t-if="metric.not_applicable" t-esc="state.lang === 'ar' ? 'غير متاح' : 'N/A'"/>
    <t t-else="" t-call="ip_dashboard.Amount"/>
   </xpath>
+  <xpath expr="//svg[@class='ip-plot']//text[@t-esc='point_index + 1']" position="attributes">
+   <attribute name="t-esc">this.salesMonthLabel(block, point, point_index)</attribute>
+   <attribute name="t-att-style">metric.monthly ? 'font-size:9px' : ''</attribute>
+  </xpath>
  </t>
 </templates>

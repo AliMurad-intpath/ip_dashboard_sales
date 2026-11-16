@@ -15,6 +15,14 @@ patch(IPDashboard.prototype, {
         if (!result?.currency_results) return result;
         return result.currency_results.find(item => item.currency_id === this.state.salesCurrencies[block.id]) || result.currency_results[0];
     },
+    salesMonthLabel(block, point, index) {
+        if (!this.result(block)?.monthly) return index + 1;
+        const match = /^(\d{4})-(\d{2})$/.exec(point.label || '');
+        if (!match) return point.label;
+        const rows = this.result(block).rows;
+        if (rows[0]?.label.slice(0,4) !== rows.at(-1)?.label.slice(0,4)) return match[2] + '/' + match[1].slice(2);
+        return new Intl.DateTimeFormat(this.state.lang === 'ar' ? 'ar-IQ' : 'en-US', {month:'short', timeZone:'UTC'}).format(new Date(Date.UTC(Number(match[1]), Number(match[2])-1, 1)));
+    },
     salesCurrencyOptions(block) {
         return this.state.results[block.id]?.currency_results || [];
     },

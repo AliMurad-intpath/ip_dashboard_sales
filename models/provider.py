@@ -4,7 +4,7 @@ import re
 from zoneinfo import ZoneInfo
 from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, ValidationError
-from .metrics import summary, grouped, percentage, growth
+from .metrics import summary, grouped, monthly, percentage, growth
 
 LIMIT = 5000
 KINDS = ['kpi', 'bar', 'table', 'column', 'line', 'area', 'pie', 'doughnut']
@@ -328,7 +328,17 @@ class SalesProvider(models.AbstractModel):
         if key in GROUPABLE and block['kind']!='kpi':
             dim=block.get('filters',{}).get('group_by','month')
             measure='count' if key in ('orders','quotes_count','expired_quotes','to_invoice_orders') else 'margin' if key=='margin' else 'amount'
-            result['rows'],result['truncated']=grouped(rows,dim,measure)
+            if dim == 'month':
+                result['rows'],result['truncated'] = monthly(rows, measure, None if key in CURRENT else start, today if key in CURRENT else end)
+                result['monthly'] = True
+                result['scope'] += ' Months without matching orders show zero.'
+                result['scope_ar'] += ' تُعرض الأشهر التي لا تحتوي طلبات مطابقة بقيمة صفر.'
+                if result['truncated']:
+                    result['scope'] += ' Latest 12 calendar months shown.'
+                    result['scope_ar'] += ' يُعرض آخر 12 شهراً تقويمياً.'
+                    result['truncated'] = False
+            else:
+                result['rows'],result['truncated']=grouped(rows,dim,measure)
             names={'month':('Order month','شهر الطلب'),'customer':('Customer','العميل'),'salesperson':('Salesperson','مندوب المبيعات'),'team':('Sales team','فريق المبيعات')}
             result.update(group_label=names[dim][0],group_label_ar=names[dim][1])
         if key=='margin_pct' and not values['bookings']:

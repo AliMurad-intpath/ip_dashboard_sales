@@ -1,6 +1,6 @@
 # IP Dashboard — Sales | المبيعات
 
-Versions: **17.0.1.2.0** and **19.0.1.2.0**. Built against your supplied IP Dashboard core **17.0.1.3.3 / 19.0.1.3.3**. This package adds Sales only; it does not replace your core, Finance, Inventory or Builder.
+Versions: **17.0.1.2.1** and **19.0.1.2.1**. Built against your supplied IP Dashboard core **17.0.1.3.3 / 19.0.1.3.3**. This package adds Sales only; it does not replace your core, Finance, Inventory or Builder.
 
 ## Install
 
@@ -62,7 +62,7 @@ Each Sales block has **Open matching orders / عرض أوامر هذا التق�
 - Stored order margins depend on the costs captured by Odoo Sales. They are not actual inventory valuation/COGS or accounting net profit. Margin percentage is weighted by total sales, not the average of individual percentages.
 - Product/category reports exclude section/note and down-payment lines; they use discounted, untaxed line subtotals. Therefore they need not reconcile to order totals containing down-payment adjustments. Categories and commercial-customer relationships reflect their current classification.
 - Current To Invoice is a **count** of orders with Odoo's `invoice_status = 'to invoice'`. The follow-up table displays full order value, not the remaining amount to invoice and not an unpaid balance. Collections remain in the Finance addon.
-- Charts show up to 12 groups. Monthly charts show the latest 12 populated months chronologically; months without orders are omitted. Other groups rank by absolute amount/count. KPI totals cover the entire matching set. Pie/doughnut charts inherit the core's negative-value restriction; use a bar/table for signed data.
+- Charts show up to 12 groups. Monthly charts show the latest 12 calendar months chronologically; months without orders are omitted. Other groups rank by absolute amount/count. KPI totals cover the entire matching set. Pie/doughnut charts inherit the core's negative-value restriction; use a bar/table for signed data.
 - Follow-up tables show the first 100 matching records, oldest first; use Open matching orders for the full paginated list. Amounts in these detail tables are full values with the company's decimal precision.
 - **Performance guard:** a source refuses to calculate more than 5,000 matching orders or product lines (and 5,000 comparison orders for growth). It shows the existing core's query-limit message, never a partial KPI. Narrow the period or use My sales. Current-workload sources ignore period, so use My sales or the native order list if they exceed this cap. Large enterprise datasets will need a separate aggregation/scalability iteration.
 

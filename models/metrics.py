@@ -1,4 +1,4 @@
-"""Pure calculations; values supplied in one company currency by the provider."""
+"""Pure calculations; values supplied in one order/pricelist currency by the provider."""
 from collections import defaultdict
 
 
@@ -48,3 +48,26 @@ def grouped(rows, dimension, measure='amount'):
         items.sort(key=lambda r: (-abs(r[2]), str(r[0])))
         selected = items[:12]
     return [{'label': label, 'value': value} for _, label, value in selected], len(items) > 12
+
+
+def monthly(rows, measure, start, end):
+    """Calendar-complete series, with at most the latest 12 calendar months."""
+    totals = defaultdict(float)
+    for row in rows:
+        totals[row['month']] += row[measure]
+    end_index = end.year * 12 + end.month - 1
+    if start:
+        first_index = start.year * 12 + start.month - 1
+    elif totals:
+        year, month = map(int, min(totals).split('-'))
+        first_index = year * 12 + month - 1
+    else:
+        first_index = end_index
+    truncated = end_index - first_index + 1 > 12
+    first_index = max(first_index, end_index - 11)
+    result = []
+    for index in range(first_index, end_index + 1):
+        year, month = divmod(index, 12)
+        label = '%04d-%02d' % (year, month + 1)
+        result.append({'label': label, 'value': totals.get(label, 0.0)})
+    return result, truncated
