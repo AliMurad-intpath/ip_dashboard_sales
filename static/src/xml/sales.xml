@@ -25,5 +25,8 @@
    <attribute name="t-esc">this.salesMonthLabel(block, point, point_index)</attribute>
    <attribute name="t-att-style">metric.monthly ? 'font-size:9px' : ''</attribute>
   </xpath>
+  <xpath expr="//p[@t-if='metric.truncated']" position="attributes">
+   <attribute name="t-esc">block.source.startsWith('sales.') &amp;&amp; metric.columns ? (state.lang === 'ar' ? 'يُعرض أقدم 100 سجل؛ يشمل العدد جميع السجلات المطابقة.' : 'Showing the oldest 100 records; counts include all matching records.') : t(metric.columns ? 'Showing first 200 records' : 'Top 12 groups shown')</attribute>
+  </xpath>
  </t>
 </templates>

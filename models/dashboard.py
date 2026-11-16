@@ -1,6 +1,6 @@
 from odoo import models, _
 from odoo.exceptions import AccessError, ValidationError
-from .provider import check_read, EXCEPTIONS, LIMIT
+from .provider import check_read, EXCEPTIONS
 
 
 class SalesDashboard(models.Model):
@@ -30,10 +30,10 @@ class SalesDashboard(models.Model):
                 raise ValidationError(_('Invalid currency.'))
             domain += [('currency_id','=',currency_id)]
         if key in EXCEPTIONS:
-            orders=provider._sales_records(domain)
-            if len(orders)>LIMIT:
-                raise ValidationError(_('More than 5,000 orders. Use My sales to narrow the workload.'))
-            domain += [('id','in',[o.id for o,case in provider._sales_exception_rows(orders,key)])]
+            ids=[]
+            for batch in provider._sales_batches('sale.order',domain):
+                ids.extend(o.id for o,case in provider._sales_exception_rows(batch,key))
+            domain += [('id','in',ids)]
         check_read(provider.env['sale.order'])
         return {'type':'ir.actions.act_window','name':_('Sales report — matching orders'),
                 'res_model':'sale.order','view_mode':'tree,form','domain':domain,'target':'current',

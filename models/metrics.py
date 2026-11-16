@@ -15,7 +15,7 @@ def customer_metrics(rows):
     amounts, counts = defaultdict(float), defaultdict(int)
     for row in rows:
         amounts[row['customer']] += row['amount']
-        counts[row['customer']] += 1
+        counts[row['customer']] += row.get('count',1)
     positive = [max(v, 0.0) for v in amounts.values()]
     return {
         'customers': len(counts),
@@ -27,9 +27,10 @@ def customer_metrics(rows):
 def summary(rows):
     total = sum(r['amount'] for r in rows)
     margin = sum(r.get('margin', 0.0) for r in rows)
-    return dict(bookings=total, orders=len(rows), aov=total / len(rows) if rows else 0.0,
+    count=sum(r.get('count',1) for r in rows)
+    return dict(bookings=total, orders=count, aov=total / count if count else 0.0,
                 margin=margin, margin_pct=percentage(margin, total),
-                confirmation_days=sum(r.get('days', 0.0) for r in rows)/len(rows) if rows else 0.0,
+                confirmation_days=sum(r.get('days', 0.0) for r in rows)/count if count else 0.0,
                 **customer_metrics(rows))
 
 

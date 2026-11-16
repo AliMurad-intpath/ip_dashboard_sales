@@ -70,3 +70,11 @@ class TestSalesDashboard(TransactionCase):
         self.assertAlmostEqual(foreign['value'],50)
         action = self.board.with_user(self.rep).sales_open_orders('sales',{'period':'all'},currency_id=currency.id)
         self.assertIn(('currency_id','=',currency.id),action['domain'])
+
+    def test_followup_respects_selected_dates(self):
+        self.board.with_user(self.rep).write({'blocks':[{'id':'followup','source':'sales.no_invoice','kind':'kpi','width':1,'filters':{'ownership':'mine'}}]})
+        result=self.board.with_user(self.rep).fetch_data({'period':'custom','date_from':'2000-01-01','date_to':'2000-01-31'})['results']['followup']
+        self.assertNotIn('error',result)
+        self.assertEqual(result['value'],0)
+        result=self.board.with_user(self.rep).fetch_data({'period':'all'})['results']['followup']
+        self.assertGreaterEqual(result['value'],1)

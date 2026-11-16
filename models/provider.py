@@ -6,7 +6,7 @@ from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, ValidationError
 from .metrics import summary, grouped, monthly, percentage, growth
 
-LIMIT = 5000
+BATCH_SIZE = 1000
 KINDS = ['kpi', 'bar', 'table', 'column', 'line', 'area', 'pie', 'doughnut']
 GROUPS = ['sales_team.group_sale_salesman', 'sales_team.group_sale_manager']
 # Title, Arabic title, explanation, Arabic explanation.
@@ -24,7 +24,7 @@ METRICS = {
  'product_sales': ('Sales by product', 'المبيعات حسب المنتج', 'Confirmed product-line subtotals after discounts and before tax. Down-payment lines are excluded.', 'قيمة بنود المنتجات المؤكدة بعد الخصم وقبل الضريبة، مع استبعاد بنود الدفعات المقدمة.'),
  'category_sales': ('Sales by product category', 'المبيعات حسب فئة المنتج', 'Confirmed product-line subtotals by current product category; excludes down payments.', 'المبيعات المؤكدة موزعة حسب التصنيف الحالي للمنتجات، من دون بنود الدفعات المقدمة.'),
  'quotes_value': ('Open quotation value', 'قيمة عروض الأسعار المفتوحة', 'Current draft/sent quotations before tax, including expired ones. Not a probability-weighted forecast.', 'قيمة عروض الأسعار غير المؤكدة حالياً قبل الضريبة، بما فيها المنتهية. ليست توقعاً مرجحاً لاحتمال البيع.'),
- 'quotes_count': ('Open quotations', 'عدد عروض الأسعار المفتوحة', 'Current draft and sent quotations, regardless of the dashboard period.', 'عدد عروض الأسعار الحالية التي لم تُؤكد بعد، بغض النظر عن الفترة المختارة.'),
+ 'quotes_count': ('Open quotations', 'عدد عروض الأسعار المفتوحة', 'Current draft and sent quotations, created in the selected period.', 'عدد عروض الأسعار الحالية التي لم تُؤكد بعد، والتي أُنشئت خلال الفترة المختارة.'),
  'expired_quotes': ('Expired open quotations', 'عروض الأسعار المفتوحة المنتهية', 'Open quotations with an expiry date before today. Missing expiry dates are not classified as expired.', 'عروض لم تُؤكد وتجاوزت تاريخ صلاحيتها. العرض الذي لا يحمل تاريخ انتهاء لا يُعد منتهياً هنا.'),
  'quote_age': ('Open quotation aging', 'أعمار عروض الأسعار المفتوحة', 'Current open quotation value by days since creation, not days past expiry.', 'قيمة العروض المفتوحة بحسب الأيام منذ إنشائها، لتحديد العروض التي تحتاج متابعة. ليست مدة التأخر عن الصلاحية.'),
  'confirmation_rate': ('Created-order confirmation rate (%)', 'نسبة تأكيد الطلبات المنشأة', 'Orders created in the selected period that are now confirmed / all orders created then. Not CRM win rate.', 'نسبة الطلبات المنشأة خلال الفترة التي أصبحت مؤكدة الآن، من جميع الطلبات المنشأة خلالها. ليست نسبة الفوز بفرص CRM.'),
@@ -37,7 +37,7 @@ METRICS.update({
  'no_delivery': ('Confirmed orders without delivery orders', 'أوامر مؤكدة بلا أوامر تسليم', 'Confirmed orders with positive goods lines and no non-cancelled customer delivery. Service-only orders are excluded. Includes orders missing both documents.', 'أوامر مؤكدة تحتوي بضائع بكميات موجبة ولا يرتبط بها تسليم للعميل غير ملغى. تُستبعد الخدمات فقط، وتشمل الحالات التي تفتقد الفاتورة أيضاً.'),
  'no_invoice': ('Confirmed orders without invoices', 'أوامر مؤكدة بلا فواتير', 'Confirmed orders with no non-cancelled customer invoice. A draft invoice counts as existing; a credit note does not. Not all these orders are invoiceable yet.', 'أوامر مؤكدة بلا فاتورة عميل غير ملغاة. الفاتورة المسودة تُعد موجودة، والإشعار الدائن لا يُعد فاتورة. قد تتطلب بعض الأوامر التسليم أولاً.'),
  'no_both': ('Confirmed orders without delivery or invoice', 'أوامر مؤكدة بلا تسليم ولا فاتورة', 'Goods orders missing both a customer delivery and a customer invoice. This is the intersection of the two preceding counts, not an additional category.', 'أوامر بضائع مؤكدة تفتقد أمر التسليم والفاتورة معاً. هي جزء مشترك من المؤشرين السابقين؛ لا تجمع الأعداد الثلاثة.'),
- 'draft_quotes': ('Draft quotations', 'عروض الأسعار المسودة', 'Only quotations in Draft; sent quotations are excluded. Current workload, independent of the selected period.', 'عروض الأسعار في حالة مسودة فقط، دون العروض المرسلة. تعرض الحالة الحالية ولا تتبع الفترة المختارة.'),
+ 'draft_quotes': ('Draft quotations', 'عروض الأسعار المسودة', 'Only quotations in Draft; sent quotations are excluded. Created in the selected period, evaluated at current status.', 'عروض الأسعار في حالة مسودة فقط، دون العروض المرسلة. تعرض العروض المنشأة خلال الفترة المختارة بحسب حالتها الحالية.'),
  'suggested_actions': ('Sales exceptions and suggested actions', 'حالات المبيعات والإجراءات المقترحة', 'One row per affected order or draft quotation, oldest first, up to 100. Suggestions only: no delivery, invoice or message is created automatically.', 'سطر واحد لكل أمر يحتاج معالجة أو عرض مسودة، الأقدم أولاً وحتى 100 سجل. إجراءات مقترحة فقط؛ لا يُنشأ تسليم أو فاتورة ولا تُرسل رسالة تلقائياً.'),
 })
 EXCEPTIONS = {'no_delivery','no_invoice','no_both','suggested_actions'}
@@ -89,10 +89,16 @@ class SalesProvider(models.AbstractModel):
         domain += [(date_field,'<',utc(end+timedelta(days=1)))]
         return domain
 
-    def _sales_records(self, domain):
-        records = self.env['sale.order'].search(domain, order='create_date,id', limit=LIMIT+1)
-        check_read(records)
-        return records
+    def _sales_batches(self, model, domain):
+        """Keyset pagination: ACL-aware, no offset scans or report record ceiling."""
+        last_id = 0
+        while True:
+            batch = self.env[model].search(list(domain)+[('id','>',last_id)], order='id', limit=BATCH_SIZE)
+            check_read(batch)
+            if not batch:
+                return
+            yield batch
+            last_id = batch[-1].id
 
     def _sales_convert(self, order, amount, company, cache=None):
         # Order amounts and sale_margin are already expressed in order currency.
@@ -184,7 +190,14 @@ class SalesProvider(models.AbstractModel):
                 domain += [('state','in',['draft','sent'])]
                 if key == 'expired_quotes':
                     domain += [('validity_date','<',today)]
-            domain += [('create_date','<=',fields.Datetime.now())]
+            if key == 'suggested_actions':
+                drafts = self._sales_dates([('state','=','draft')], 'create_date', start, end)
+                confirmed = self._sales_dates([('state','in',['sale','done'])], 'date_order', start, end)
+                from odoo.osv import expression
+                domain = expression.AND([domain, expression.OR([drafts, confirmed])])
+            else:
+                date_field = 'date_order' if key in EXCEPTIONS or key in ('to_invoice_orders','invoice_followup') else 'create_date'
+                domain = self._sales_dates(domain, date_field, start, end)
         elif key in COHORT:
             domain = self._sales_dates(domain,'create_date',start,end)
         else:
@@ -206,42 +219,91 @@ class SalesProvider(models.AbstractModel):
         self = self.with_company(company).with_context(allowed_company_ids=[company.id])
         spec,key,domain,start,end,today,base = self._sales_selection(source_key,block,filters,company)
         arabic = self.env.context.get('ip_sales_language') == 'ar' or (not self.env.context.get('ip_sales_language') and (self.env.lang or '').startswith('ar'))
-        orders = self._sales_records(domain)
-        if len(orders)>LIMIT:
-            return {'error':'query_limit'}
-        previous = []
-        if key == 'growth' and start:
-            previous_end = start - timedelta(days=1)
-            previous_start = start - (end-start+timedelta(days=1))
-            previous = self._sales_records(self._sales_dates(base+[('state','in',['sale','done'])], 'date_order', previous_start, previous_end))
-            if len(previous) > LIMIT:
-                return {'error':'query_limit'}
         split = key in MONEY | {'top5_share','margin_pct','growth'}
-        currencies = {}
-        if split:
-            for order in list(orders) + list(previous):
-                check_read(order.currency_id)
-                currencies[order.currency_id.id] = order.currency_id
-        if not currencies:
-            return self._sales_evaluate(key, block, company, orders, previous, start, end, today, arabic, None)
-        results = []
-        for currency in sorted(currencies.values(), key=lambda c: (c.name,c.id)):
-            selected = [o for o in orders if o.currency_id.id == currency.id]
-            baseline = [o for o in previous if o.currency_id.id == currency.id]
-            result = self._sales_evaluate(key, block, company, selected, baseline, start, end, today, arabic, currency)
-            result['currency_id'] = currency.id
+        buckets = {}
+        dim = block.get('filters',{}).get('group_by','month') if key in GROUPABLE and block['kind'] != 'kpi' else None
+        def bucket(order=None):
+            currency = order.currency_id if split and order else None
+            if currency:
+                check_read(currency)
+            code = currency.id if currency else 0
+            if code not in buckets:
+                buckets[code] = dict(currency=currency, count=0, target=0, cases=0, sample=[], rows={}, ages=[0.0]*4, before=0.0)
+            return buckets[code]
+        def add_row(data, row, dimension):
+            group = row[dimension] if dimension else 0
+            target = data['rows'].setdefault(group, dict(row, amount=0.0, margin=0.0, count=0, days=0.0))
+            for name in ('amount','margin','count','days'):
+                target[name] += row.get(name,0.0)
+        for batch in self._sales_batches('sale.order',domain):
+            for order in batch:
+                data = bucket(order)
+                data['count'] += 1
+                if key in EXCEPTIONS:
+                    case = self._sales_case(order,key)
+                    if case:
+                        data['cases'] += 1
+                        if key == 'suggested_actions':
+                            # Keep only the oldest 100 display rows, never all order records.
+                            check_read(order.partner_id);check_read(order.user_id)
+                            label, action = self._sales_actions(order,case,arabic)
+                            row = [order.name,order.partner_id.display_name,order.user_id.display_name or ('غير معيّن' if arabic else 'Unassigned'),label,action]
+                            data['sample'].append((order.create_date,order.id,row))
+                    continue
+                if key.endswith('followup'):
+                    check_read(order.partner_id);check_read(order.user_id);check_read(order.currency_id)
+                    row = [order.name,order.partner_id.display_name,order.user_id.display_name or '',fields.Datetime.context_timestamp(self,order.create_date).strftime('%Y-%m-%d'),format(order.amount_untaxed,',.%df' % order.currency_id.decimal_places),order.currency_id.name]
+                    data['sample'].append((order.create_date,order.id,row))
+                    continue
+                if key in COHORT:
+                    data['target'] += int(order.state in (('sale','done') if key=='confirmation_rate' else ('cancel',)))
+                    continue
+                if key in ('draft_quotes','product_sales','category_sales'):
+                    continue
+                row = self._sales_rows([order],company,key in ('margin','margin_pct'),key not in ('orders','customers','repeat_share','confirmation_days','quotes_count','expired_quotes','to_invoice_orders'))[0]
+                if key in CURRENT:
+                    month = fields.Datetime.context_timestamp(self,order.create_date if key not in ('to_invoice_orders','invoice_followup') else order.date_order).strftime('%Y-%m')
+                    row.update(month=month,month_label=month)
+                if key=='quote_age':
+                    days=max(0,(today-fields.Datetime.context_timestamp(self,order.create_date).date()).days)
+                    data['ages'][0 if days<=7 else 1 if days<=30 else 2 if days<=60 else 3] += row['amount']
+                add_row(data,row, 'customer' if key in ('customers','repeat_share','top5_share') else dim)
+            if key in ('product_sales','category_sales'):
+                for lines in self._sales_batches('sale.order.line',[('order_id','in',batch.ids),('display_type','=',False),('is_downpayment','=',False)]):
+                    for line in lines:
+                        group = line.product_id if key=='product_sales' else line.product_id.categ_id
+                        check_read(group)
+                        add_row(bucket(line.order_id),dict(product=group.id,product_label=group.display_name or '',amount=line.price_subtotal),'product')
+            for data in buckets.values():
+                data['sample'] = sorted(data['sample'],key=lambda item:(item[0],item[1]))[:100]
+        if key=='growth' and start:
+            previous_end=start-timedelta(days=1)
+            previous_start=start-(end-start+timedelta(days=1))
+            previous_domain=self._sales_dates(base+[('state','in',['sale','done'])],'date_order',previous_start,previous_end)
+            for batch in self._sales_batches('sale.order',previous_domain):
+                for order in batch:
+                    bucket(order)['before'] += order.amount_untaxed
+        if not buckets:
+            bucket()
+        results=[]
+        for data in sorted(buckets.values(),key=lambda b: b['currency'].name if b['currency'] else ''):
+            result=self._sales_evaluate(key,block,company,[],[],start,end,today,arabic,data['currency'],data)
+            if data['currency']:
+                result['currency_id']=data['currency'].id
             results.append(result)
-        if len(results) == 1:
-            return results[0]
-        # Keep the legacy result shape while allowing the UI to select one cohort.
-        return dict(results[0], currency_results=results)
+        return dict(results[0],currency_results=results) if len(results)>1 else results[0]
 
-    def _sales_evaluate(self, key, block, company, orders, previous, start, end, today, arabic, currency):
+    def _sales_evaluate(self, key, block, company, orders, previous, start, end, today, arabic, currency, prepared):
         result = dict(value=0.0,unit='currency' if key in MONEY else 'percent' if key in PERCENT else 'number',
             currency=currency.name if currency else '',rows=[],truncated=False,group_label='Group',group_label_ar='المجموعة')
         if key in CURRENT:
-            en='Current open workload; period filter does not apply.'
-            ar='حالة المتابعة الآن؛ لا تتغير عند اختيار فترة أخرى.'
+            basis = 'confirmation date' if key in EXCEPTIONS or key in ('to_invoice_orders','invoice_followup') else 'creation date'
+            basis_ar = 'تاريخ التأكيد' if basis == 'confirmation date' else 'تاريخ الإنشاء'
+            if key == 'suggested_actions':
+                basis = 'quotation creation / order confirmation date'
+                basis_ar = 'تاريخ إنشاء العرض أو تأكيد الأمر'
+            en='Selected %s to %s by %s; current status, not a historical snapshot.' % (start or 'inception',end,basis)
+            ar='من %s إلى %s حسب %s؛ تُقيّم الحالة الحالية، وليس الوضع التاريخي في نهاية الفترة.' % (start or 'البداية',end,basis_ar)
         elif key in COHORT:
             en='Created %s to %s; evaluated at current status.' % (start or 'inception',end)
             ar='طلبات أُنشئت من %s إلى %s، بحسب حالتها الآن.' % (start or 'البداية',end)
@@ -256,56 +318,35 @@ class SalesProvider(models.AbstractModel):
             ar += ' لا توجد طلبات مطابقة لتحديد عملتها.'
         result.update(scope=en,scope_ar=ar)
         if key=='draft_quotes':
-            result['value']=len(orders)
+            result['value']=prepared['count']
             return result
         if key in EXCEPTIONS:
-            cases=self._sales_exception_rows(orders,key)
-            result['value']=len(cases)
+            result['value']=prepared['cases']
             if key=='suggested_actions':
                 result['columns']=['الطلب','العميل','المسؤول','الحالة','الإجراء المقترح'] if arabic else ['Order','Customer','Owner','Case','Suggested action']
-                result['records']=[]
-                for order,case in cases[:100]:
-                    check_read(order.partner_id);check_read(order.user_id)
-                    label,action=self._sales_actions(order,case,arabic)
-                    result['records'].append([order.name,order.partner_id.display_name,order.user_id.display_name or ('غير معيّن' if arabic else 'Unassigned'),label,action])
-                result['truncated']=len(cases)>100
+                result['records']=[item[2] for item in prepared['sample']]
+                result['truncated']=prepared['cases']>100
             return result
         if key in COHORT:
             target = ('sale','done') if key=='confirmation_rate' else ('cancel',)
-            result['value']=percentage(sum(o.state in target for o in orders),len(orders))
-            if not orders:
+            result['value']=percentage(prepared['target'],prepared['count'])
+            if not prepared['count']:
                 result.update(value=None,not_applicable=True,scope=en+' No orders in this cohort.',scope_ar=ar+' لا توجد طلبات في هذه الفترة لحساب النسبة.')
             return result
         if key in ('product_sales','category_sales'):
-            lines = self.env['sale.order.line'].search([('order_id','in',[o.id for o in orders]),('display_type','=',False),('is_downpayment','=',False)],limit=LIMIT+1)
-            check_read(lines)
-            if len(lines)>LIMIT:return {'error':'query_limit'}
-            rows=[]
-            conversions={}
-            for line in lines:
-                group=line.product_id if key=='product_sales' else line.product_id.categ_id
-                check_read(group)
-                rows.append(dict(product=group.id,product_label=group.display_name or '',amount=self._sales_convert(line.order_id,line.price_subtotal,company,conversions)))
+            rows=list(prepared['rows'].values())
             result['value']=sum(r['amount'] for r in rows)
             result['rows'],result['truncated']=grouped(rows,'product')
             result.update(group_label='Product' if key=='product_sales' else 'Category',group_label_ar='المنتج' if key=='product_sales' else 'الفئة')
             return result
         if key.endswith('followup'):
             result['columns']=(['الطلب','العميل','مندوب المبيعات','تاريخ الإنشاء','قيمة الطلب','العملة'] if arabic else ['Order','Customer','Salesperson','Created','Order value','Currency'])
-            result['records']=[]
-            conversions={}
-            for order in orders[:100]:
-                check_read(order.partner_id);check_read(order.user_id);check_read(order.currency_id)
-                result['records'].append([order.name,order.partner_id.display_name,order.user_id.display_name or '',
-                    fields.Datetime.context_timestamp(self,order.create_date).strftime('%Y-%m-%d'),format(order.amount_untaxed,',.%df' % order.currency_id.decimal_places),order.currency_id.name])
-            result.update(value=len(orders),truncated=len(orders)>100)
+            result['records']=[item[2] for item in prepared['sample']]
+            result.update(value=prepared['count'],truncated=prepared['count']>100)
             return result
-        rows = self._sales_rows(orders,company,key in ('margin','margin_pct'),key not in ('orders','customers','repeat_share','confirmation_days','quotes_count','expired_quotes','to_invoice_orders'))
+        rows=list(prepared['rows'].values())
         if key=='quote_age':
-            amounts=[0.0]*4
-            for order,row in zip(orders,rows):
-                days=max(0,(today-fields.Datetime.context_timestamp(self,order.create_date).date()).days)
-                amounts[0 if days<=7 else 1 if days<=30 else 2 if days<=60 else 3]+=row['amount']
+            amounts=prepared['ages']
             labels=['0–7 days','8–30 days','31–60 days','Over 60 days'] if not arabic else ['حتى 7 أيام','8–30 يوماً','31–60 يوماً','أكثر من 60 يوماً']
             result.update(value=sum(amounts),rows=[dict(label=k,value=v) for k,v in zip(labels,amounts)],group_label='Age since creation',group_label_ar='المدة منذ الإنشاء')
             return result
@@ -316,7 +357,7 @@ class SalesProvider(models.AbstractModel):
             previous_end=start-timedelta(days=1)
             previous_start=start-(end-start+timedelta(days=1))
             conversions={}
-            before=sum(self._sales_convert(o,o.amount_untaxed,company,conversions) for o in previous)
+            before=prepared['before']
             change=growth(sum(r['amount'] for r in rows),before)
             result['value']=change
             result['not_applicable']=change is None
@@ -324,12 +365,12 @@ class SalesProvider(models.AbstractModel):
                 scope_ar='مقارنة بالفترة من %s إلى %s. %s' % (previous_start,previous_end,'لا توجد قيمة مقارنة موجبة؛ النسبة غير متاحة.' if change is None else 'بنفس عدد الأيام.'))
             return result
         values=summary(rows)
-        result['value']=sum(r['amount'] for r in rows) if key=='quotes_value' else len(rows) if key in ('quotes_count','expired_quotes','to_invoice_orders') else values[key]
+        result['value']=sum(r['amount'] for r in rows) if key=='quotes_value' else prepared['count'] if key in ('quotes_count','expired_quotes','to_invoice_orders') else values[key]
         if key in GROUPABLE and block['kind']!='kpi':
             dim=block.get('filters',{}).get('group_by','month')
             measure='count' if key in ('orders','quotes_count','expired_quotes','to_invoice_orders') else 'margin' if key=='margin' else 'amount'
             if dim == 'month':
-                result['rows'],result['truncated'] = monthly(rows, measure, None if key in CURRENT else start, today if key in CURRENT else end)
+                result['rows'],result['truncated'] = monthly(rows, measure, start, end)
                 result['monthly'] = True
                 result['scope'] += ' Months without matching orders show zero.'
                 result['scope_ar'] += ' تُعرض الأشهر التي لا تحتوي طلبات مطابقة بقيمة صفر.'
