@@ -1,6 +1,6 @@
 # IP Dashboard — Sales | المبيعات
 
-Versions: **17.0.1.1.0** and **19.0.1.1.0**. Built against your supplied IP Dashboard core **17.0.1.3.3 / 19.0.1.3.3**. This package adds Sales only; it does not replace your core, Finance, Inventory or Builder.
+Versions: **17.0.1.2.0** and **19.0.1.2.0**. Built against your supplied IP Dashboard core **17.0.1.3.3 / 19.0.1.3.3**. This package adds Sales only; it does not replace your core, Finance, Inventory or Builder.
 
 ## Install
 
@@ -34,7 +34,7 @@ Each Sales block has **Open matching orders / عرض أوامر هذا التق�
 | `sales.repeat_share` | Repeat-buyer share (%) / نسبة العملاء متكرري الشراء | Customers with at least two confirmed orders in this period / buying customers. Not lifetime retention. |
 | `sales.top5_share` | Top-five customer concentration (%) / حصة أكبر خمسة عملاء | Top five positive customer sales balances / all positive customer sales balances. |
 | `sales.growth` | Sales change (%) / نسبة تغير المبيعات | Change versus the immediately preceding period of equal length. Requires a positive comparison value. |
-| `sales.margin` | Sales order margin / هامش ربح أوامر البيع | Stored Sales margin, converted to company currency. Depends on recorded costs; not accounting net profit. |
+| `sales.margin` | Sales order margin / هامش ربح أوامر البيع | Stored Sales margin in the order’s pricelist currency. Depends on recorded costs; not accounting net profit. |
 | `sales.margin_pct` | Sales margin (%) / نسبة هامش ربح المبيعات | Total stored Sales margin / total untaxed confirmed sales; not an average of order percentages. |
 | `sales.confirmation_days` | Average days to confirm / متوسط أيام تأكيد الطلب | Elapsed days from record creation to confirmation for orders confirmed in the period. |
 | `sales.product_sales` | Sales by product / المبيعات حسب المنتج | Confirmed product-line subtotals after discounts and before tax. Down-payment lines are excluded. |
@@ -46,7 +46,7 @@ Each Sales block has **Open matching orders / عرض أوامر هذا التق�
 | `sales.confirmation_rate` | Created-order confirmation rate (%) / نسبة تأكيد الطلبات المنشأة | Orders created in the selected period that are now confirmed / all orders created then. Not CRM win rate. |
 | `sales.cancel_rate` | Created-order cancellation rate (%) / نسبة إلغاء الطلبات المنشأة | Orders created in the selected period that are now cancelled / all orders created then. |
 | `sales.to_invoice_orders` | Orders ready to invoice / أوامر بيع جاهزة للفوترة | Current confirmed orders with Odoo invoice status To Invoice. This is a count, not an unpaid amount. |
-| `sales.quote_followup` | Quotation follow-up list / قائمة متابعة عروض الأسعار | Oldest open quotations first; up to 100 rows. Values before tax, in company currency. |
+| `sales.quote_followup` | Quotation follow-up list / قائمة متابعة عروض الأسعار | Oldest open quotations first; up to 100 rows. Values before tax, with each order’s currency. |
 | `sales.invoice_followup` | Orders to invoice / قائمة الأوامر المطلوب فوترتها | Oldest confirmed orders currently ready to invoice; displayed value is the full untaxed order value. |
 
 ## Dates, values and reconciliation
@@ -55,7 +55,7 @@ Each Sales block has **Open matching orders / عرض أوامر هذا التق�
 - Current open quotations, expired quotations and ready-to-invoice orders ignore the dashboard period. The subtitle says so. Expired means `validity_date < today`; today and missing expiry dates are not expired.
 - Confirmation/cancellation percentages select records by **creation date** and evaluate their **current state**. The denominator includes open, confirmed and cancelled records, including direct orders. These are order-cohort measures, not CRM opportunity win/loss rates.
 - Average confirmation days uses creation-to-order-date elapsed time. It is not the CRM sales cycle and cannot reconstruct earlier edits to dates.
-- Company currency is used everywhere. Foreign amounts are converted at the order-date historical rate; current quotes also use their order date, not today's rate. Conversion factors are reused within each calculation. Missing historical rates fail closed rather than silently applying a 1:1 rate. Confirm rates for every transaction currency and company before deployment.
+- Sales amounts use the recorded order/pricelist currency (`sale.order.currency_id`), with no exchange conversion or rate lookup. Single-currency blocks display that currency automatically. Mixed-currency blocks offer a currency selector; totals, averages, margins, concentration and growth are calculated separately. Growth includes currencies present only in the comparison period. Follow-up tables label each row's currency. No matching orders means no currency is inferred from the company. Counts remain across all currencies. CSV exports include the displayed currency. Matching-order actions follow the displayed currency. Currency selection is a temporary view choice and is not saved to the dashboard layout.
 - Growth compares a bounded selected period with the immediately preceding **equal number of calendar days**. It is not automatically year-on-year or calendar-month-on-month. All-time selection and zero/negative comparison sales show **N/A / غير متاح**. Empty conversion cohorts and margins with a zero sales denominator also show N/A.
 - Repeat buyers are customers with two or more orders **within the selected period**, not lifetime retention. Customer grouping consolidates contacts using `commercial_partner_id`; equal display names do not merge unrelated customer records.
 - Concentration is the largest five positive customer sales balances divided by all positive customer sales balances. It can be 100% when there are fewer than five customers. Negative customer balances are excluded from that ratio only.

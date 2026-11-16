@@ -2,6 +2,15 @@
 <templates xml:space="preserve">
  <t t-inherit="ip_dashboard.Workspace" t-inherit-mode="extension">
   <xpath expr="//p[@t-if='metric &amp;&amp; metric.scope']" position="after">
+   <div t-if="this.salesCurrencyOptions(block).length &amp;&amp; !state.editing" class="ip-actions">
+    <label>
+     <span t-esc="state.lang === 'ar' ? 'عملة الطلبات' : 'Order currency'"/>
+     <select class="ip-input" t-att-value="metric.currency_id" t-on-change="(event) =&gt; this.salesCurrencyChange(block, event)">
+      <option t-foreach="this.salesCurrencyOptions(block)" t-as="item" t-key="item.currency_id" t-att-value="item.currency_id" t-esc="item.currency"/>
+     </select>
+    </label>
+    <span class="ip-caption" t-esc="state.lang === 'ar' ? 'تُعرض كل عملة على حدة؛ لا تُجمع العملات المختلفة.' : 'Each currency is reported separately; different currencies are never added together.'"/>
+   </div>
    <div t-if="block.source.startsWith('sales.') &amp;&amp; !state.editing" class="ip-actions">
     <button type="button" class="ip-btn" t-att-disabled="state.salesOpening" t-on-click="() =&gt; this.salesOpenOrders(block)">
      <t t-esc="state.lang === 'ar' ? 'عرض أوامر هذا التقرير' : 'Open matching orders'"/>

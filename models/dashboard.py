@@ -11,7 +11,7 @@ class SalesDashboard(models.Model):
         scoped = self.with_context(ip_sales_language='ar' if language == 'ar' else 'en')
         return super(SalesDashboard, scoped).fetch_data(filters, company_id, language)
 
-    def sales_open_orders(self, block_id, filters, company_id=False):
+    def sales_open_orders(self, block_id, filters, company_id=False, currency_id=False):
         self.ensure_one()
         check_read(self)
         company_id = company_id or self.company_id.id or self.env.company.id
@@ -25,6 +25,10 @@ class SalesDashboard(models.Model):
         company = self.env['res.company'].browse(company_id)
         provider = self.env['ip.dashboard.provider'].with_company(company).with_context(allowed_company_ids=[company.id])
         spec,key,domain,start,end,today,base = provider._sales_selection(block['source'],block,filters,company)
+        if currency_id:
+            if type(currency_id) is not int or currency_id <= 0:
+                raise ValidationError(_('Invalid currency.'))
+            domain += [('currency_id','=',currency_id)]
         if key in EXCEPTIONS:
             orders=provider._sales_records(domain)
             if len(orders)>LIMIT:

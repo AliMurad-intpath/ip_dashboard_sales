@@ -18,7 +18,7 @@ METRICS = {
  'repeat_share': ('Repeat-buyer share (%)', 'نسبة العملاء متكرري الشراء', 'Customers with at least two confirmed orders in this period / buying customers. Not lifetime retention.', 'نسبة العملاء الذين اشتروا مرتين أو أكثر خلال نفس الفترة. لا تقيس الاحتفاظ بالعملاء عبر السنوات.'),
  'top5_share': ('Top-five customer concentration (%)', 'حصة أكبر خمسة عملاء', 'Top five positive customer sales balances / all positive customer sales balances.', 'حصة أكبر خمسة عملاء من المبيعات ذات الرصيد الموجب، لمعرفة مدى اعتماد النشاط على عدد محدود من العملاء.'),
  'growth': ('Sales change (%)', 'نسبة تغير المبيعات', 'Change versus the immediately preceding period of equal length. Requires a positive comparison value.', 'تغير المبيعات مقارنة بالفترة السابقة مباشرة وبنفس عدد الأيام. لا تُحسب النسبة إن لم تكن مبيعات المقارنة موجبة.'),
- 'margin': ('Sales order margin', 'هامش ربح أوامر البيع', 'Stored Sales margin, converted to company currency. Depends on recorded costs; not accounting net profit.', 'هامش الربح المسجل في أوامر البيع بحسب التكاليف المدخلة. لا يمثل صافي الربح المحاسبي.'),
+ 'margin': ('Sales order margin', 'هامش ربح أوامر البيع', 'Stored Sales margin in the order’s pricelist currency. Depends on recorded costs; not accounting net profit.', 'هامش الربح المسجل في أوامر البيع بحسب التكاليف المدخلة. لا يمثل صافي الربح المحاسبي.'),
  'margin_pct': ('Sales margin (%)', 'نسبة هامش ربح المبيعات', 'Total stored Sales margin / total untaxed confirmed sales; not an average of order percentages.', 'إجمالي هامش الربح مقسوماً على إجمالي المبيعات قبل الضريبة؛ وليس متوسط نسب ربح الطلبات.'),
  'confirmation_days': ('Average days to confirm', 'متوسط أيام تأكيد الطلب', 'Elapsed days from record creation to confirmation for orders confirmed in the period.', 'متوسط المدة بين إنشاء الطلب وتأكيده للأوامر المؤكدة خلال الفترة. الطلبات المؤكدة فوراً تخفض هذا المتوسط.'),
  'product_sales': ('Sales by product', 'المبيعات حسب المنتج', 'Confirmed product-line subtotals after discounts and before tax. Down-payment lines are excluded.', 'قيمة بنود المنتجات المؤكدة بعد الخصم وقبل الضريبة، مع استبعاد بنود الدفعات المقدمة.'),
@@ -30,7 +30,7 @@ METRICS = {
  'confirmation_rate': ('Created-order confirmation rate (%)', 'نسبة تأكيد الطلبات المنشأة', 'Orders created in the selected period that are now confirmed / all orders created then. Not CRM win rate.', 'نسبة الطلبات المنشأة خلال الفترة التي أصبحت مؤكدة الآن، من جميع الطلبات المنشأة خلالها. ليست نسبة الفوز بفرص CRM.'),
  'cancel_rate': ('Created-order cancellation rate (%)', 'نسبة إلغاء الطلبات المنشأة', 'Orders created in the selected period that are now cancelled / all orders created then.', 'نسبة الطلبات المنشأة خلال الفترة التي أصبحت ملغاة الآن، بما فيها عروض الأسعار الملغاة.'),
  'to_invoice_orders': ('Orders ready to invoice', 'أوامر بيع جاهزة للفوترة', 'Current confirmed orders with Odoo invoice status To Invoice. This is a count, not an unpaid amount.', 'عدد الأوامر المؤكدة التي يعرض أودو حالتها للفوترة. لا يمثل قيمة الفواتير غير المسددة.'),
- 'quote_followup': ('Quotation follow-up list', 'قائمة متابعة عروض الأسعار', 'Oldest open quotations first; up to 100 rows. Values before tax, in company currency.', 'أقدم العروض المفتوحة أولاً، حتى 100 عرض، مع قيمتها قبل الضريبة بعملة الشركة لتسهيل المتابعة.'),
+ 'quote_followup': ('Quotation follow-up list', 'قائمة متابعة عروض الأسعار', 'Oldest open quotations first; up to 100 rows. Values before tax, with each order’s currency.', 'أقدم العروض المفتوحة أولاً، حتى 100 عرض، مع قيمتها قبل الضريبة بعملة كل طلب لتسهيل المتابعة.'),
  'invoice_followup': ('Orders to invoice', 'قائمة الأوامر المطلوب فوترتها', 'Oldest confirmed orders currently ready to invoice; displayed value is the full untaxed order value.', 'أقدم الأوامر الجاهزة للفوترة. القيمة المعروضة هي كامل قيمة أمر البيع قبل الضريبة وليست المبلغ المتبقي للفوترة.'),
 }
 METRICS.update({
@@ -95,21 +95,9 @@ class SalesProvider(models.AbstractModel):
         return records
 
     def _sales_convert(self, order, amount, company, cache=None):
-        day = fields.Date.to_date(order.date_order)
-        currency = order.currency_id
-        cache = {} if cache is None else cache
-        key = (currency.id, company.id, day)
-        if key in cache:
-            return amount * cache[key]
-        # Avoid Odoo's implicit 1.0 fallback when no historical rate exists.
-        if currency != company.currency_id:
-            for item in (currency, company.currency_id):
-                if not self.env['res.currency.rate'].search_count([
-                    ('currency_id','=',item.id),('name','<=',day),
-                    '|',('company_id','=',False),('company_id','=',company.id)]):
-                    raise ValidationError(_('A currency has no historical rate for the order date.'))
-        cache[key] = currency._convert(1.0,company.currency_id,company,day,round=False)
-        return amount * cache[key]
+        # Order amounts and sale_margin are already expressed in order currency.
+        # Currency cohorts are separated before any monetary aggregation.
+        return amount
 
     def _sales_rows(self, orders, company, include_margin=False, include_amount=True):
         rows = []
@@ -206,8 +194,9 @@ class SalesProvider(models.AbstractModel):
 
     def _run_source(self, source_key, block, filters, company):
         result = self._sales_run_source(source_key, block, filters, company)
-        if source_key.startswith('sales.') and result.get('scope_ar'):
-            result['scope_ar'] = re.sub(r'\b\d{4}-\d{2}-\d{2}\b', lambda m: '\u2066'+m.group(0)+'\u2069', result['scope_ar'])
+        for item in [result] + result.get('currency_results', []):
+            if source_key.startswith('sales.') and item.get('scope_ar'):
+                item['scope_ar'] = re.sub(r'\b\d{4}-\d{2}-\d{2}\b', lambda m: '\u2066'+m.group(0)+'\u2069', item['scope_ar'])
         return result
 
     def _sales_run_source(self, source_key, block, filters, company):
@@ -220,8 +209,36 @@ class SalesProvider(models.AbstractModel):
         orders = self._sales_records(domain)
         if len(orders)>LIMIT:
             return {'error':'query_limit'}
+        previous = []
+        if key == 'growth' and start:
+            previous_end = start - timedelta(days=1)
+            previous_start = start - (end-start+timedelta(days=1))
+            previous = self._sales_records(self._sales_dates(base+[('state','in',['sale','done'])], 'date_order', previous_start, previous_end))
+            if len(previous) > LIMIT:
+                return {'error':'query_limit'}
+        split = key in MONEY | {'top5_share','margin_pct','growth'}
+        currencies = {}
+        if split:
+            for order in list(orders) + list(previous):
+                check_read(order.currency_id)
+                currencies[order.currency_id.id] = order.currency_id
+        if not currencies:
+            return self._sales_evaluate(key, block, company, orders, previous, start, end, today, arabic, None)
+        results = []
+        for currency in sorted(currencies.values(), key=lambda c: (c.name,c.id)):
+            selected = [o for o in orders if o.currency_id.id == currency.id]
+            baseline = [o for o in previous if o.currency_id.id == currency.id]
+            result = self._sales_evaluate(key, block, company, selected, baseline, start, end, today, arabic, currency)
+            result['currency_id'] = currency.id
+            results.append(result)
+        if len(results) == 1:
+            return results[0]
+        # Keep the legacy result shape while allowing the UI to select one cohort.
+        return dict(results[0], currency_results=results)
+
+    def _sales_evaluate(self, key, block, company, orders, previous, start, end, today, arabic, currency):
         result = dict(value=0.0,unit='currency' if key in MONEY else 'percent' if key in PERCENT else 'number',
-            currency=company.currency_id.name,rows=[],truncated=False,group_label='Group',group_label_ar='المجموعة')
+            currency=currency.name if currency else '',rows=[],truncated=False,group_label='Group',group_label_ar='المجموعة')
         if key in CURRENT:
             en='Current open workload; period filter does not apply.'
             ar='حالة المتابعة الآن؛ لا تتغير عند اختيار فترة أخرى.'
@@ -229,11 +246,14 @@ class SalesProvider(models.AbstractModel):
             en='Created %s to %s; evaluated at current status.' % (start or 'inception',end)
             ar='طلبات أُنشئت من %s إلى %s، بحسب حالتها الآن.' % (start or 'البداية',end)
         else:
-            en='Confirmed %s to %s. Order-date exchange rates; company currency.' % (start or 'inception',end)
-            ar='أوامر مؤكدة من %s إلى %s، بعملة الشركة وبسعر الصرف في تاريخ الطلب.' % (start or 'البداية',end)
-        if key in MONEY or key.endswith('followup'):
-            en += ' Amounts in ' + company.currency_id.name + '.'
-            ar += ' المبالغ بعملة ' + company.currency_id.name + '.'
+            en='Confirmed %s to %s.' % (start or 'inception',end)
+            ar='أوامر مؤكدة من %s إلى %s.' % (start or 'البداية',end)
+        if currency:
+            en += ' Order/pricelist currency: ' + currency.name + '. No currency conversion.'
+            ar += ' عملة الطلب وقائمة الأسعار: ' + currency.name + '، دون تحويل عملات.'
+        elif key in MONEY:
+            en += ' No matching orders; no order currency available.'
+            ar += ' لا توجد طلبات مطابقة لتحديد عملتها.'
         result.update(scope=en,scope_ar=ar)
         if key=='draft_quotes':
             result['value']=len(orders)
@@ -257,7 +277,7 @@ class SalesProvider(models.AbstractModel):
                 result.update(value=None,not_applicable=True,scope=en+' No orders in this cohort.',scope_ar=ar+' لا توجد طلبات في هذه الفترة لحساب النسبة.')
             return result
         if key in ('product_sales','category_sales'):
-            lines = self.env['sale.order.line'].search([('order_id','in',orders.ids),('display_type','=',False),('is_downpayment','=',False)],limit=LIMIT+1)
+            lines = self.env['sale.order.line'].search([('order_id','in',[o.id for o in orders]),('display_type','=',False),('is_downpayment','=',False)],limit=LIMIT+1)
             check_read(lines)
             if len(lines)>LIMIT:return {'error':'query_limit'}
             rows=[]
@@ -271,13 +291,13 @@ class SalesProvider(models.AbstractModel):
             result.update(group_label='Product' if key=='product_sales' else 'Category',group_label_ar='المنتج' if key=='product_sales' else 'الفئة')
             return result
         if key.endswith('followup'):
-            result['columns']=(['الطلب','العميل','مندوب المبيعات','تاريخ الإنشاء','قيمة الطلب ('+company.currency_id.name+')'] if arabic else ['Order','Customer','Salesperson','Created','Order value ('+company.currency_id.name+')'])
+            result['columns']=(['الطلب','العميل','مندوب المبيعات','تاريخ الإنشاء','قيمة الطلب','العملة'] if arabic else ['Order','Customer','Salesperson','Created','Order value','Currency'])
             result['records']=[]
             conversions={}
             for order in orders[:100]:
-                check_read(order.partner_id);check_read(order.user_id)
+                check_read(order.partner_id);check_read(order.user_id);check_read(order.currency_id)
                 result['records'].append([order.name,order.partner_id.display_name,order.user_id.display_name or '',
-                    fields.Datetime.context_timestamp(self,order.create_date).strftime('%Y-%m-%d'),format(self._sales_convert(order,order.amount_untaxed,company,conversions),',.%df' % company.currency_id.decimal_places)])
+                    fields.Datetime.context_timestamp(self,order.create_date).strftime('%Y-%m-%d'),format(order.amount_untaxed,',.%df' % order.currency_id.decimal_places),order.currency_id.name])
             result.update(value=len(orders),truncated=len(orders)>100)
             return result
         rows = self._sales_rows(orders,company,key in ('margin','margin_pct'),key not in ('orders','customers','repeat_share','confirmation_days','quotes_count','expired_quotes','to_invoice_orders'))
@@ -295,8 +315,6 @@ class SalesProvider(models.AbstractModel):
                 return result
             previous_end=start-timedelta(days=1)
             previous_start=start-(end-start+timedelta(days=1))
-            previous=self._sales_records(self._sales_dates(base+[('state','in',['sale','done'])],'date_order',previous_start,previous_end))
-            if len(previous)>LIMIT:return {'error':'query_limit'}
             conversions={}
             before=sum(self._sales_convert(o,o.amount_untaxed,company,conversions) for o in previous)
             change=growth(sum(r['amount'] for r in rows),before)

@@ -53,3 +53,20 @@ class TestSalesDashboard(TransactionCase):
         result=self.board.with_user(self.rep).fetch_data({'period':'all'},language='ar')['results']['age']
         self.assertNotIn('error',result)
         self.assertEqual(result['rows'][0]['label'],'حتى 7 أيام')
+
+    def test_foreign_pricelist_amount_keeps_order_currency(self):
+        currency = self.env['res.currency'].search([('id','!=',self.env.company.currency_id.id)],limit=1)
+        if not currency:
+            self.skipTest('A second currency is required')
+        currency.active = True
+        pricelist = self.env['product.pricelist'].create({'name':'Foreign sales test', 'currency_id':currency.id})
+        order = self.env['sale.order'].create({'partner_id':self.customer.id,'user_id':self.rep.id,
+            'pricelist_id':pricelist.id,
+            'order_line':[Command.create({'product_id':self.product.id,'product_uom_qty':1,'price_unit':50,'tax_id':[Command.clear()]})]})
+        order.action_confirm()
+        result = self.board.with_user(self.rep).fetch_data({'period':'all'})['results']['sales']
+        foreign = next(r for r in result['currency_results'] if r['currency_id']==currency.id)
+        self.assertEqual(foreign['currency'],currency.name)
+        self.assertAlmostEqual(foreign['value'],50)
+        action = self.board.with_user(self.rep).sales_open_orders('sales',{'period':'all'},currency_id=currency.id)
+        self.assertIn(('currency_id','=',currency.id),action['domain'])
