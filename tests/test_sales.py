@@ -15,7 +15,7 @@ class TestSalesDashboard(TransactionCase):
         cls.customer = cls.env['res.partner'].create({'name':'Sales test customer'})
         cls.product = cls.env['product.product'].create({'name':'Sales test service','type':'service','list_price':100})
         cls.order = cls.env['sale.order'].create({'partner_id':cls.customer.id,'user_id':cls.rep.id,
-            'order_line':[Command.create({'product_id':cls.product.id,'product_uom_qty':2,'price_unit':100,'tax_ids':[Command.clear()]})]})
+            'order_line':[Command.create({'product_id':cls.product.id,'product_uom_qty':2,'price_unit':100,'tax_id':[Command.clear()]})]})
         cls.order.action_confirm()
         cls.board=cls.env['ip.dashboard'].with_user(cls.rep).create({'name':'Sales tests','company_id':cls.env.company.id,
             'blocks':[{'id':'sales','source':'sales.bookings','kind':'kpi','width':1,'filters':{'ownership':'mine'}}]})
