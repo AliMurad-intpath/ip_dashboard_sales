@@ -15,7 +15,7 @@ class TestSalesDashboard(TransactionCase):
         cls.customer = cls.env['res.partner'].create({'name':'Sales test customer'})
         cls.product = cls.env['product.product'].create({'name':'Sales test service','type':'service','list_price':100})
         cls.order = cls.env['sale.order'].create({'partner_id':cls.customer.id,'user_id':cls.rep.id,
-            'order_line':[Command.create({'product_id':cls.product.id,'product_uom_qty':2,'price_unit':100,'tax_id':[Command.clear()]})]})
+            'order_line':[Command.create({'product_id':cls.product.id,'product_uom_qty':2,'price_unit':100,'tax_ids':[Command.clear()]})]})
         cls.order.action_confirm()
         cls.board=cls.env['ip.dashboard'].with_user(cls.rep).create({'name':'Sales tests','company_id':cls.env.company.id,
             'blocks':[{'id':'sales','source':'sales.bookings','kind':'kpi','width':1,'filters':{'ownership':'mine'}}]})
@@ -62,7 +62,7 @@ class TestSalesDashboard(TransactionCase):
         pricelist = self.env['product.pricelist'].create({'name':'Foreign sales test', 'currency_id':currency.id})
         order = self.env['sale.order'].create({'partner_id':self.customer.id,'user_id':self.rep.id,
             'pricelist_id':pricelist.id,
-            'order_line':[Command.create({'product_id':self.product.id,'product_uom_qty':1,'price_unit':50,'tax_id':[Command.clear()]})]})
+            'order_line':[Command.create({'product_id':self.product.id,'product_uom_qty':1,'price_unit':50,'tax_ids':[Command.clear()]})]})
         order.action_confirm()
         result = self.board.with_user(self.rep).fetch_data({'period':'all'})['results']['sales']
         foreign = next(r for r in result['currency_results'] if r['currency_id']==currency.id)
