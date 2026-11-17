@@ -15,7 +15,7 @@ class TestSalesDashboard(TransactionCase):
         cls.customer = cls.env['res.partner'].create({'name':'Sales test customer'})
         cls.product = cls.env['product.product'].create({'name':'Sales test service','type':'service','list_price':100})
         cls.order = cls.env['sale.order'].create({'partner_id':cls.customer.id,'user_id':cls.rep.id,
-            'order_line':[Command.create({'product_id':cls.product.id,'product_uom_qty':2,'price_unit':100,'tax_ids':[Command.clear()]})]})
+            'order_line':[Command.create({'product_id':cls.product.id,'product_uom_qty':2,'price_unit':100,'tax_id':[Command.clear()]})]})
         cls.order.action_confirm()
         cls.board=cls.env['ip.dashboard'].with_user(cls.rep).create({'name':'Sales tests','company_id':cls.env.company.id,
             'blocks':[{'id':'sales','source':'sales.bookings','kind':'kpi','width':1,'filters':{'ownership':'mine'}}]})
@@ -53,3 +53,28 @@ class TestSalesDashboard(TransactionCase):
         result=self.board.with_user(self.rep).fetch_data({'period':'all'},language='ar')['results']['age']
         self.assertNotIn('error',result)
         self.assertEqual(result['rows'][0]['label'],'حتى 7 أيام')
+
+    def test_foreign_pricelist_amount_keeps_order_currency(self):
+        currency = self.env['res.currency'].search([('id','!=',self.env.company.currency_id.id)],limit=1)
+        if not currency:
+            self.skipTest('A second currency is required')
+        currency.active = True
+        pricelist = self.env['product.pricelist'].create({'name':'Foreign sales test', 'currency_id':currency.id})
+        order = self.env['sale.order'].create({'partner_id':self.customer.id,'user_id':self.rep.id,
+            'pricelist_id':pricelist.id,
+            'order_line':[Command.create({'product_id':self.product.id,'product_uom_qty':1,'price_unit':50,'tax_id':[Command.clear()]})]})
+        order.action_confirm()
+        result = self.board.with_user(self.rep).fetch_data({'period':'all'})['results']['sales']
+        foreign = next(r for r in result['currency_results'] if r['currency_id']==currency.id)
+        self.assertEqual(foreign['currency'],currency.name)
+        self.assertAlmostEqual(foreign['value'],50)
+        action = self.board.with_user(self.rep).sales_open_orders('sales',{'period':'all'},currency_id=currency.id)
+        self.assertIn(('currency_id','=',currency.id),action['domain'])
+
+    def test_followup_respects_selected_dates(self):
+        self.board.with_user(self.rep).write({'blocks':[{'id':'followup','source':'sales.no_invoice','kind':'kpi','width':1,'filters':{'ownership':'mine'}}]})
+        result=self.board.with_user(self.rep).fetch_data({'period':'custom','date_from':'2000-01-01','date_to':'2000-01-31'})['results']['followup']
+        self.assertNotIn('error',result)
+        self.assertEqual(result['value'],0)
+        result=self.board.with_user(self.rep).fetch_data({'period':'all'})['results']['followup']
+        self.assertGreaterEqual(result['value'],1)

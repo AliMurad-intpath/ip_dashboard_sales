@@ -1,6 +1,6 @@
 from odoo import models, _
 from odoo.exceptions import AccessError, ValidationError
-from .provider import check_read, EXCEPTIONS, LIMIT
+from .provider import check_read, EXCEPTIONS
 
 
 class SalesDashboard(models.Model):
@@ -11,7 +11,7 @@ class SalesDashboard(models.Model):
         scoped = self.with_context(ip_sales_language='ar' if language == 'ar' else 'en')
         return super(SalesDashboard, scoped).fetch_data(filters, company_id, language)
 
-    def sales_open_orders(self, block_id, filters, company_id=False):
+    def sales_open_orders(self, block_id, filters, company_id=False, currency_id=False):
         self.ensure_one()
         check_read(self)
         company_id = company_id or self.company_id.id or self.env.company.id
@@ -25,12 +25,16 @@ class SalesDashboard(models.Model):
         company = self.env['res.company'].browse(company_id)
         provider = self.env['ip.dashboard.provider'].with_company(company).with_context(allowed_company_ids=[company.id])
         spec,key,domain,start,end,today,base = provider._sales_selection(block['source'],block,filters,company)
+        if currency_id:
+            if type(currency_id) is not int or currency_id <= 0:
+                raise ValidationError(_('Invalid currency.'))
+            domain += [('currency_id','=',currency_id)]
         if key in EXCEPTIONS:
-            orders=provider._sales_records(domain)
-            if len(orders)>LIMIT:
-                raise ValidationError(_('More than 5,000 orders. Use My sales to narrow the workload.'))
-            domain += [('id','in',[o.id for o,case in provider._sales_exception_rows(orders,key)])]
+            ids=[]
+            for batch in provider._sales_batches('sale.order',domain):
+                ids.extend(o.id for o,case in provider._sales_exception_rows(batch,key))
+            domain += [('id','in',ids)]
         check_read(provider.env['sale.order'])
         return {'type':'ir.actions.act_window','name':_('Sales report — matching orders'),
-                'res_model':'sale.order','view_mode':'list,form','domain':domain,'target':'current',
+                'res_model':'sale.order','view_mode':'tree,form','domain':domain,'target':'current',
                 'context':{'allowed_company_ids':[company.id],'create':False,'edit':False,'delete':False}}
