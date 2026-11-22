@@ -10,6 +10,31 @@ patch(IPDashboard.prototype, {
         this.state.salesOpening = false;
         this.state.salesCurrencies = {};
     },
+    async salesOpenOrders(block) {
+        if (this.state.salesOpening || this.state.editing || !this.state.board) return;
+        this.state.salesOpening = true;
+        try {
+            const action = await this.orm.call('ip.dashboard', 'sales_open_orders',
+                [[this.state.board.id], block.id, {...this.state.filters}, Number(this.state.company), this.result(block)?.currency_id || false]);
+            await this.salesAction.doAction(action);
+        } catch (error) {
+            // Show the server's reason (company, block, access) when there is one, not a guess.
+            const reason = error?.data?.message;
+            const fallback = this.state.lang === 'ar' ? 'تعذر فتح الأوامر.' : 'Could not open orders.';
+            this.notification.add(reason ? fallback + ' ' + reason : fallback, {type:'warning'});
+        } finally {
+            this.state.salesOpening = false;
+        }
+    },
+    // Sales KPIs open through the server, which narrows exception reports (e.g. orders without
+    // an invoice) to the orders that actually have the exception. Rows use the core drill.
+    openRecords(block, index = null) {
+        if (index === null && block.source?.startsWith('sales.') && !this.state.editing) {
+            this.tipClear?.();
+            return this.salesOpenOrders(block);
+        }
+        return super.openRecords(block, index);
+    },
     result(block) {
         const result = super.result(block);
         if (!result?.currency_results) return result;
@@ -40,18 +65,5 @@ patch(IPDashboard.prototype, {
         const cell = v => '"'+String(typeof v === 'string' && /^[=+@\-\t\r]/.test(v) ? "'"+v : v).replaceAll('"','""')+'"';
         const url = URL.createObjectURL(new Blob(['\ufeff'+rows.map(row=>row.map(cell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
         const a = document.createElement('a'); a.href=url; a.download='IP-Dashboard.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
-    },
-    async salesOpenOrders(block) {
-        if (this.state.salesOpening || this.state.editing || !this.state.board) return;
-        this.state.salesOpening = true;
-        try {
-            const action = await this.orm.call('ip.dashboard', 'sales_open_orders',
-                [[this.state.board.id], block.id, {...this.state.filters}, Number(this.state.company), this.result(block)?.currency_id || false]);
-            await this.salesAction.doAction(action);
-        } catch (error) {
-            this.notification.add(this.state.lang === 'ar' ? 'تعذر فتح الأوامر. تحقق من الصلاحيات والفلاتر.' : 'Could not open orders. Check permissions and filters.', {type:'warning'});
-        } finally {
-            this.state.salesOpening = false;
-        }
     },
 });

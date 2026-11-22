@@ -36,5 +36,5 @@ class SalesDashboard(models.Model):
             domain += [('id','in',ids)]
         check_read(provider.env['sale.order'])
         return {'type':'ir.actions.act_window','name':_('Sales report — matching orders'),
-                'res_model':'sale.order','view_mode':'tree,form','domain':domain,'target':'current',
+                'res_model':'sale.order','view_mode':'tree,form','views':[(False,'tree'),(False,'form')],'domain':domain,'target':'current',
                 'context':{'allowed_company_ids':[company.id],'create':False,'edit':False,'delete':False}}

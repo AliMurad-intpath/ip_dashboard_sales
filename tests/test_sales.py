@@ -40,6 +40,8 @@ class TestSalesDashboard(TransactionCase):
         action=self.board.with_user(self.rep).sales_open_orders('sales',{'period':'all'})
         self.assertIn(('company_id','=',self.env.company.id),action['domain'])
         self.assertIn(('user_id','=',self.rep.id),action['domain'])
+        # The web client builds window actions from `views`; without it the action throws in the browser.
+        self.assertEqual(action['views'],[(False,'tree'),(False,'form')])
         with self.assertRaises(ValidationError):
             self.board.with_user(self.rep).sales_open_orders('missing',{'period':'all'})
 

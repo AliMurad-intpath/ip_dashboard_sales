@@ -290,6 +290,8 @@ class SalesProvider(models.AbstractModel):
             result=self._sales_evaluate(key,block,company,[],[],start,end,today,arabic,data['currency'],data)
             if data['currency']:
                 result['currency_id']=data['currency'].id
+            # KPIs open the orders behind the number; grouped rows are computed in Python, so no row drill.
+            result['drill']=self._ip_drill('sale.order', domain+([('currency_id','=',data['currency'].id)] if data['currency'] else []))
             results.append(result)
         return dict(results[0],currency_results=results) if len(results)>1 else results[0]
 

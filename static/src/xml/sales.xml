@@ -11,11 +11,6 @@
     </label>
     <span class="ip-caption" t-esc="state.lang === 'ar' ? 'تُعرض كل عملة على حدة؛ لا تُجمع العملات المختلفة.' : 'Each currency is reported separately; different currencies are never added together.'"/>
    </div>
-   <div t-if="block.source.startsWith('sales.') &amp;&amp; !state.editing" class="ip-actions">
-    <button type="button" class="ip-btn" t-att-disabled="state.salesOpening" t-on-click="() =&gt; this.salesOpenOrders(block)">
-     <t t-esc="state.lang === 'ar' ? 'عرض أوامر هذا التقرير' : 'Open matching orders'"/>
-    </button>
-   </div>
   </xpath>
   <xpath expr="//div[@t-if=&quot;block.kind === 'kpi'&quot;]/t[@t-call='ip_dashboard.Amount']" position="replace">
    <span t-if="metric.not_applicable" t-esc="state.lang === 'ar' ? 'غير متاح' : 'N/A'"/>
